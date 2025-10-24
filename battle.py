@@ -4,6 +4,7 @@ Risk Battle Probability Calculator Library
 Calculates exact probabilities for Risk game battles including:
 - Normal battles (1-3 attackers vs 1-2 defenders)
 - Capital defense bonuses (extra die for defender)
+- Balanced Blitz mode (adjusts final battle outcome probabilities)
 """
 
 from itertools import product
@@ -119,7 +120,7 @@ class RiskBattle:
             if (att, dfd) in memo:
                 return memo[(att, dfd)]
             
-            # Get single round probabilities
+            # Get single round probabilities (NO Balanced Blitz adjustment here)
             round_probs = cls.single_round_probabilities(att, dfd, capital_defense)
 
             result = {
@@ -189,9 +190,10 @@ def battle_probabilities_balanced_blitz(n_attackers, n_defenders, capital_defens
     """
     Calculate battle probabilities using Balanced Blitz algorithm.
     
-    This simulates RISK: Global Domination's Balanced Blitz mode which
-    adjusts outcome probabilities to make high-probability wins more likely
-    and low-probability wins less likely.
+    This simulates RISK: Global Domination's Balanced Blitz mode 
+    which adjusts FINAL battle outcome probabilities to make high-probability wins more likely
+    and low-probability wins less likely. The adjustment is applied to the complete battle
+    results, NOT to individual combat rounds.
     
     Args:
         n_attackers: Initial number of attacking armies
@@ -199,59 +201,49 @@ def battle_probabilities_balanced_blitz(n_attackers, n_defenders, capital_defens
         capital_defense: If True, defender gets capital bonus
     
     Returns:
-        dict: same format as battle_probabilities but with adjusted odds
+        dict: same format as battle_probabilities but with adjusted final probabilities
     """
-    # Memoization for dynamic programming
-    memo = {}
+    # First, calculate the true random battle probabilities
+    true_random_result = RiskBattle.battle_probabilities(n_attackers, n_defenders, capital_defense)
     
-    def dp(att, dfd):
-        """Recursively calculate probabilities with Balanced Blitz."""
-        if att == 0:
-            return {'attacker_wins': 0.0, 'defender_wins': 1.0,
-                   'attacker_survivors': {0: 1.0}, 'defender_survivors': {dfd: 1.0}}
-        if dfd == 0:
-            return {'attacker_wins': 1.0, 'defender_wins': 0.0,
-                   'attacker_survivors': {att: 1.0}, 'defender_survivors': {0: 1.0}}
-        
-        if (att, dfd) in memo:
-            return memo[(att, dfd)]
-        
-        # Get single round probabilities (true random)
-        round_probs = RiskBattle.single_round_probabilities(att, dfd, capital_defense)
-        
-        # Apply Balanced Blitz adjustment to this round
-        round_probs = apply_balanced_blitz(round_probs)
-        
-        result = {
-            'attacker_wins': 0.0,
-            'defender_wins': 0.0,
-            'attacker_survivors': defaultdict(float),
-            'defender_survivors': defaultdict(float)
-        }
-        
-        # Aggregate over all possible outcomes
-        for (att_loss, def_loss), prob in round_probs.items():
-            new_att = att - att_loss
-            new_dfd = dfd - def_loss
-            
-            sub_result = dp(new_att, new_dfd)
-            
-            result['attacker_wins'] += prob * sub_result['attacker_wins']
-            result['defender_wins'] += prob * sub_result['defender_wins']
-            
-            for survivors, survivor_prob in sub_result['attacker_survivors'].items():
-                result['attacker_survivors'][survivors] += prob * survivor_prob
-            for survivors, survivor_prob in sub_result['defender_survivors'].items():
-                result['defender_survivors'][survivors] += prob * survivor_prob
-        
-        # Convert defaultdict to regular dict
-        result['attacker_survivors'] = dict(result['attacker_survivors'])
-        result['defender_survivors'] = dict(result['defender_survivors'])
-        
-        memo[(att, dfd)] = result
-        return result
+    # Extract just the win/loss probabilities for Balanced Blitz adjustment
+    outcome_probs = {
+        'attacker_wins': true_random_result['attacker_wins'],
+        'defender_wins': true_random_result['defender_wins']
+    }
     
-    return dp(n_attackers, n_defenders)
+    # Apply Balanced Blitz adjustment to the FINAL battle outcomes
+    adjusted_outcomes = apply_balanced_blitz(outcome_probs)
+    
+    # Calculate the adjustment ratios
+    attacker_ratio = adjusted_outcomes['attacker_wins'] / true_random_result['attacker_wins'] if true_random_result['attacker_wins'] > 0 else 0
+    defender_ratio = adjusted_outcomes['defender_wins'] / true_random_result['defender_wins'] if true_random_result['defender_wins'] > 0 else 0
+    
+    # Apply the same ratios to the survivor distributions
+    # This maintains consistency between win probabilities and survivor counts
+    adjusted_attacker_survivors = {}
+    adjusted_defender_survivors = {}
+    
+    # Adjust attacker survivor probabilities
+    for survivors, prob in true_random_result['attacker_survivors'].items():
+        if survivors > 0:  # Attacker wins
+            adjusted_attacker_survivors[survivors] = prob * attacker_ratio
+        else:  # Attacker loses (0 survivors)
+            adjusted_attacker_survivors[survivors] = prob * defender_ratio
+    
+    # Adjust defender survivor probabilities
+    for survivors, prob in true_random_result['defender_survivors'].items():
+        if survivors > 0:  # Defender wins
+            adjusted_defender_survivors[survivors] = prob * defender_ratio
+        else:  # Defender loses (0 survivors)
+            adjusted_defender_survivors[survivors] = prob * attacker_ratio
+    
+    return {
+        'attacker_wins': adjusted_outcomes['attacker_wins'],
+        'defender_wins': adjusted_outcomes['defender_wins'],
+        'attacker_survivors': adjusted_attacker_survivors,
+        'defender_survivors': adjusted_defender_survivors
+    }
 
 
 def print_single_round_analysis(n_attackers, n_defenders, capital=False):
@@ -318,6 +310,13 @@ def print_balanced_blitz_comparison(n_attackers, n_defenders, capital=False):
         print(f"  Recommendation: MANUAL ROLL (low odds hurt attacker more in blitz)")
     else:
         print(f"  Recommendation: Player choice (odds are in middle range)")
+    
+    # Additional verification that probabilities sum to 1.0
+    tr_sum = result_tr['attacker_wins'] + result_tr['defender_wins']
+    bb_sum = result_bb['attacker_wins'] + result_bb['defender_wins']
+    print(f"\nProbability sum verification:")
+    print(f"  True Random sum:    {tr_sum:.6f}")
+    print(f"  Balanced Blitz sum: {bb_sum:.6f}")
 
 
 def plot_probability_vs_troops():

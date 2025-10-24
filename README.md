@@ -2,8 +2,6 @@
 
 This code reveals Risk battle probabilities for my personal amusement. Use these figures at your own *Risk*.
 
-**Note:** This branch, `balanced-blitz` is not correct and is still **Under Construction**. Need to convert [https://github.com/smgstudio/risk-dice](https://github.com/smgstudio/risk-dice).
-
 ## Getting Started
 
 ```sh
@@ -13,4 +11,12 @@ python battle.py
 
 ## Results
 
-**NOT finished, do not use.**
+### Classic Boardgame
+
+![](./boardgame.png)
+
+### Global Domination
+
+This chart shows balanced blitz diced in comparison with true random (classic boardgame). The two charts on the right are advantages in comparison with true random.
+
+![](./balancedBlitz.png)
