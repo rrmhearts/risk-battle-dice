@@ -11,4 +11,12 @@ python battle.py
 
 ## Results
 
+### Classic Boardgame
+
 ![](./boardgame.png)
+
+### Global Domination
+
+This chart shows balanced blitz diced in comparison with true random (classic boardgame). The two charts on the right are advantages in comparison with true random.
+
+![](./balancedBlitz.png)
